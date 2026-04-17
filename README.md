@@ -7,6 +7,7 @@ A full-stack MERN application that uses RAG (Retrieval-Augmented Generation) to 
 ## ✨ Features
 
 - **AI Project Parsing** — Describe your project in plain English, get a structured Bill of Materials and required skills
+- **Grounded AI Advisor (RAG)** — Get a personalized project strategy grounded in the *actually available* community hardware and mentors
 - **Vector Search Matching** — MongoDB Atlas Vector Search finds the most relevant hardware and mentors in your community
 - **Hardware Registry** — Share your idle Raspberry Pis, Arduinos, sensors, and tools
 - **Skills Profile** — Declare your expertise and get matched as a mentor

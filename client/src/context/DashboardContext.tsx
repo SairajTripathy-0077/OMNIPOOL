@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, ReactNode } from 'react';
-import { parseProject, matchResources } from '../api/client';
+import { parseProject, matchResources, getAdvice } from '../api/client';
 
 export interface BOMItem {
   hardware_name: string;
@@ -17,7 +17,7 @@ export interface HardwareItem {
 export interface Mentor {
   id: string;
   name: string;
-  expertise: string[];
+  skills: string[];
 }
 
 export interface AIResult {
@@ -25,6 +25,13 @@ export interface AIResult {
   description: string;
   extrapolated_BOM: BOMItem[];
   required_skills: string[];
+}
+
+export interface ProjectAdvice {
+  strategy: string;
+  difficulty: "Beginner" | "Intermediate" | "Advanced" | "Unknown";
+  feasibility_score: number;
+  next_steps: string[];
 }
 
 interface DashboardState {
@@ -35,6 +42,7 @@ interface DashboardState {
   aiResult: AIResult | null;
   matchedHardware: HardwareItem[];
   matchedMentors: Mentor[];
+  projectAdvice: ProjectAdvice | null;
   submitPrompt: () => Promise<void>;
 }
 
@@ -47,6 +55,7 @@ export const DashboardProvider: React.FC<{ children: ReactNode }> = ({ children 
   const [aiResult, setAiResult] = useState<AIResult | null>(null);
   const [matchedHardware, setMatchedHardware] = useState<HardwareItem[]>([]);
   const [matchedMentors, setMatchedMentors] = useState<Mentor[]>([]);
+  const [projectAdvice, setProjectAdvice] = useState<ProjectAdvice | null>(null);
 
   const submitPrompt = async () => {
     if (!projectPrompt.trim()) return;
@@ -56,6 +65,7 @@ export const DashboardProvider: React.FC<{ children: ReactNode }> = ({ children 
     setAiResult(null);
     setMatchedHardware([]);
     setMatchedMentors([]);
+    setProjectAdvice(null);
 
     try {
       // 1. Parse Project
@@ -64,20 +74,36 @@ export const DashboardProvider: React.FC<{ children: ReactNode }> = ({ children 
       setAiResult(result);
 
       // 2. Match Resources
+      let localHardware: HardwareItem[] = [];
+      let localMentors: Mentor[] = [];
+
       if (result.extrapolated_BOM?.length > 0 || result.required_skills?.length > 0) {
         const matchResponse = await matchResources(result.extrapolated_BOM, result.required_skills);
-        setMatchedHardware(matchResponse.data.data.matched_hardware || []);
-        setMatchedMentors(matchResponse.data.data.matched_mentors || []);
+        localHardware = matchResponse.data.data.matched_hardware || [];
+        localMentors = matchResponse.data.data.matched_mentors || [];
+        
+        setMatchedHardware(localHardware);
+        setMatchedMentors(localMentors);
       }
+
+      // 3. Get Project Advice (RAG Layer)
+      const adviceResponse = await getAdvice(projectPrompt, localHardware, localMentors);
+      setProjectAdvice(adviceResponse.data.data);
+
       setHasLoaded(true);
     } catch (error) {
       console.error('Error processing project prompt:', error);
-      // Fallback/Mock for UI display if backend fails during development
       setAiResult({
-        title: "Mocked AI Response",
-        description: "Your backend failed to respond. Simulated result loaded.",
-        extrapolated_BOM: [{ hardware_name: 'Raspberry Pi', quantity: 1, notes: 'Mock data' }],
-        required_skills: ['Python', 'Mocking']
+        title: "Analysis Failed",
+        description: "We couldn't process your request. Please check your connectivity or API key.",
+        extrapolated_BOM: [],
+        required_skills: []
+      });
+      setProjectAdvice({
+        strategy: "Error: " + (error as any).message || "Something went wrong during generation.",
+        difficulty: "Unknown",
+        feasibility_score: 0,
+        next_steps: ["Try again in a few moments", "Check your .env settings"]
       });
       setHasLoaded(true);
     } finally {
@@ -95,6 +121,7 @@ export const DashboardProvider: React.FC<{ children: ReactNode }> = ({ children 
         aiResult,
         matchedHardware,
         matchedMentors,
+        projectAdvice,
         submitPrompt
       }}
     >

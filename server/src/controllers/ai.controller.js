@@ -1,7 +1,6 @@
-const { parseProjectDescription } = require('../services/gemini.service');
+const { parseProjectDescription, generateProjectAdvice } = require('../services/gemini.service');
 const { generateEmbedding } = require('../services/embedding.service');
 const { searchHardware, searchMentors } = require('../services/vectorSearch.service');
-const { getMockHardwareMatches, getMockMentorMatches } = require('../utils/mockData');
 const { isGeminiConfigured } = require('../config/gemini');
 const ProjectRequest = require('../models/ProjectRequest');
 
@@ -24,15 +23,19 @@ const parseProject = async (req, res, next) => {
 
     // Optionally save as a draft project
     let project = null;
-    if (req.userId) {
-      project = await ProjectRequest.create({
-        title: result.title || 'Untitled Project',
-        raw_description,
-        user_id: req.userId,
-        extrapolated_BOM: result.extrapolated_BOM,
-        required_skills: result.required_skills,
-        status: 'parsed',
-      });
+    try {
+      if (req.userId) {
+        project = await ProjectRequest.create({
+          title: result.title || 'Untitled Project',
+          raw_description,
+          user_id: req.userId,
+          extrapolated_BOM: result.extrapolated_BOM,
+          required_skills: result.required_skills,
+          status: 'parsed',
+        });
+      }
+    } catch (dbError) {
+      console.warn('Could not save project request to DB:', dbError.message);
     }
 
     res.status(200).json({
@@ -65,8 +68,8 @@ const matchResources = async (req, res, next) => {
     let matchedHardware = [];
     let matchedMentors = [];
 
-    if (isGeminiConfigured()) {
-      // Generate embeddings and search
+    // Generate embeddings and search
+    try {
       if (extrapolated_BOM && extrapolated_BOM.length > 0) {
         const bomText = extrapolated_BOM.map((b) => b.hardware_name).join(', ');
         const bomEmbedding = await generateEmbedding(bomText);
@@ -78,10 +81,11 @@ const matchResources = async (req, res, next) => {
         const skillsEmbedding = await generateEmbedding(skillsText);
         matchedMentors = await searchMentors(skillsEmbedding, { availability: true });
       }
-    } else {
-      // Mock responses
-      matchedHardware = getMockHardwareMatches();
-      matchedMentors = getMockMentorMatches();
+    } catch (dbError) {
+      console.warn('Resource matching failed due to DB issue:', dbError.message);
+      // Fallback to empty results to allow advice generation to proceed
+      matchedHardware = matchedHardware || [];
+      matchedMentors = matchedMentors || [];
     }
 
     res.status(200).json({
@@ -96,4 +100,34 @@ const matchResources = async (req, res, next) => {
   }
 };
 
-module.exports = { parseProject, matchResources };
+/**
+ * POST /api/ai/get-advice
+ * Grounded generation: Takes raw description and matched resources to give advice.
+ */
+const getAdvice = async (req, res, next) => {
+  try {
+    const { raw_description, matched_hardware, matched_mentors } = req.body;
+
+    if (!raw_description) {
+      return res.status(400).json({
+        success: false,
+        error: 'raw_description is required',
+      });
+    }
+
+    const advice = await generateProjectAdvice(
+      raw_description,
+      matched_hardware || [],
+      matched_mentors || []
+    );
+
+    res.status(200).json({
+      success: true,
+      data: advice,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+module.exports = { parseProject, matchResources, getAdvice };

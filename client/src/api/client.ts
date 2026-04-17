@@ -44,6 +44,9 @@ export const parseProject = (raw_description: string) =>
 export const matchResources = (extrapolated_BOM: unknown[], required_skills: string[]) =>
   api.post('/ai/match-resources', { extrapolated_BOM, required_skills });
 
+export const getAdvice = (raw_description: string, matched_hardware: unknown[], matched_mentors: unknown[]) =>
+  api.post('/ai/get-advice', { raw_description, matched_hardware, matched_mentors });
+
 // ===== User Endpoints =====
 export const registerUser = (data: { name: string; email: string; password: string; skills?: string[] }) =>
   api.post('/users', data);
