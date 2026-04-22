@@ -9,6 +9,7 @@ const buildAuthUserResponse = (user, token) => ({
   email: user.email,
   firebaseUid: user.firebaseUid,
   skills: user.skills,
+  bio: user.bio,
   avatar_url: user.avatar_url,
   role: user.role,
   account_type: user.account_type,
@@ -252,6 +253,15 @@ const updateUser = async (req, res, next) => {
     const { name, skills, bio, availability, location } = req.body;
     const updateData = {};
 
+    // Handle 'self' as a special case for authenticated users
+    let userId = req.params.id;
+    if (userId === 'self') {
+      userId = req.userId || req.user?._id;
+      if (!userId) {
+        return res.status(401).json({ success: false, error: 'Unauthorized: Cannot identify user' });
+      }
+    }
+
     if (name) updateData.name = name;
     if (bio !== undefined) updateData.bio = bio;
     if (availability !== undefined) updateData.availability = availability;
@@ -262,7 +272,7 @@ const updateUser = async (req, res, next) => {
       updateData.skills_embedding = await generateAverageEmbedding(skills);
     }
 
-    const user = await User.findByIdAndUpdate(req.params.id, updateData, {
+    const user = await User.findByIdAndUpdate(userId, updateData, {
       new: true,
       runValidators: true,
     }).select("-password -skills_embedding");

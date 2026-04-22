@@ -13,6 +13,7 @@ export interface AppUser {
   name: string;
   email: string;
   skills: string[];
+  bio?: string;
   token: string;
   avatar_url?: string;
   role?: UserRole;

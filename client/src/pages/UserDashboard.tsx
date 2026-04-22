@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Link, useLocation } from "react-router-dom";
 import useStore from "../store/useStore";
 import { updateUser } from "../api/client";
@@ -31,6 +31,7 @@ const badgeVariants = ['indigo', 'violet', 'cyan', 'emerald', 'amber', 'rose'] a
 // --- MAIN DASHBOARD CONTENT ---
 const DashboardContent = () => {
   const user = useStore((state) => state.user);
+  const setUser = useStore((state) => state.setUser);
   const { userSkills, setUserSkills } = useStore();
   const [selectedSkills, setSelectedSkills] = useState<string[]>(userSkills);
   const [customSkill, setCustomSkill] = useState('');
@@ -38,6 +39,18 @@ const DashboardContent = () => {
   const [searchFilter, setSearchFilter] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [error, setError] = useState('');
+
+  // Initialize skills and bio from user data
+  useEffect(() => {
+    if (user?.skills && user.skills.length > 0) {
+      setSelectedSkills(user.skills);
+      setUserSkills(user.skills);
+    }
+    if (user?.bio) {
+      setBio(user.bio);
+    }
+  }, [user?._id]); // Re-initialize when user changes
 
   const filteredSkills = POPULAR_SKILLS.filter(
     (skill) =>
@@ -52,6 +65,7 @@ const DashboardContent = () => {
       setSelectedSkills([...selectedSkills, skill]);
     }
     setSaved(false);
+    setError('');
   };
 
   const addCustomSkill = () => {
@@ -60,20 +74,29 @@ const DashboardContent = () => {
       setSelectedSkills([...selectedSkills, skill]);
       setCustomSkill('');
       setSaved(false);
+      setError('');
     }
   };
 
   const handleSave = async () => {
     setIsSaving(true);
+    setError('');
     try {
-      await updateUser('self', { skills: selectedSkills, bio });
-    } catch {
-      // Expected in dev mode without auth
+      const response = await updateUser('self', { skills: selectedSkills, bio });
+      if (response.data?.success) {
+        // Update the store with new user data
+        const updatedUser = { ...user, skills: selectedSkills, bio };
+        setUser(updatedUser);
+        setUserSkills(selectedSkills);
+        setSaved(true);
+        setTimeout(() => setSaved(false), 3000);
+      }
+    } catch (err: any) {
+      const errorMsg = err.response?.data?.error || 'Failed to save changes';
+      setError(errorMsg);
+      console.error('Error saving user data:', err);
     }
-    setUserSkills(selectedSkills);
-    setSaved(true);
     setIsSaving(false);
-    setTimeout(() => setSaved(false), 3000);
   };
 
   return (
@@ -240,6 +263,9 @@ const DashboardContent = () => {
 
         {/* Save Actions */}
         <div className="flex items-center justify-end gap-6 pt-8 pb-10">
+          {error && <span className="text-sm font-semibold text-accent-rose">
+            {error}
+          </span>}
           {saved && <span className="text-sm font-semibold text-accent-emerald animate-pulse flex items-center gap-2">
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
             Successfully Updated!
